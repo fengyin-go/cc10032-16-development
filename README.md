@@ -79,5 +79,44 @@ npm run dev
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
 
+## 序号16：分层样本数据 ↔ 调试会话 ↔ 调试异常报告可追溯链路
+
+数据采样不再只输出样本数量，`data_sampler → debug_trace` 链路新增完整的可追溯闭环，
+状态独立存放在 `app/store.py` 的序号16专用注册表中，不改变历史 `data_sampler` /
+`debug_trace` 列表接口的返回结构。
+
+### 领域规则
+
+- 导入源事件文件后执行**分层采样**，每份分层样本只绑定一个**采样批次**和一个
+  **策略版本**（`backend/app/services/sample_trace.py`）。
+- 调试会话必须**引用完整样本**；调试追踪按目标算子记录中间结果（期望/实际/差异）
+  与异常标记，并生成唯一的**调试异常报告**。同一批次重复启动调试不产生多个当前报告。
+- 序号16连续/重复导入只入库一次：以「文件边界 + 采样策略」同源指纹做幂等；
+  两种文件边界在序号16下生成不同策略版本。事务失败时回滚全部注册表改动并退回原文件。
+- 调试期间采样上限/比例被修改时，可「按原样本完成当前报告」或「按新比例重新采样
+  再开一轮」，页面最终只确定一个与样本版本一致的当前报告；故障重开沿同批样本重建当前报告。
+- 导出按采样批次打包分层样本数据与调试异常报告，支持再次上传只读校验，并登记
+  导入/导出台账；同时提供只读校验与幂等回流导入两种导出处理方式的取舍比较。
+
+### 接口（前缀 `/api/sample-trace`，见 `backend/app/routers/sample_trace.py`）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/imports` | 导入文件生成分层样本数据（幂等，失败回滚退回原文件） |
+| GET | `/batches`、`/batches/{id}` | 采样批次列表/详情（含分层数量、样本特征） |
+| POST | `/batches/{id}/debug-sessions` | 引用完整样本启动调试，生成唯一当前报告 |
+| GET | `/debug-sessions`、`/debug-sessions/{id}` | 调试会话列表/详情（含完整样本与报告） |
+| POST | `/debug-sessions/{id}/complete` | 按原样本完成当前报告 |
+| POST | `/batches/{id}/resample` | 按新比例/新上限重采样再开一轮 |
+| POST | `/batches/{id}/fault-reopen` | 故障重开，沿同批样本重建当前报告 |
+| GET | `/batches/{id}/reports/current`、`/reports/{id}` | 当前/指定调试异常报告 |
+| GET | `/batches/{id}/export` | 调试详情页文件下载 |
+| POST | `/exports/verify`、`/exports/compare-handling` | 再上传校验 / 两种导出处理取舍 |
+| GET | `/ledger` | 导入导出台账 |
+
+前端在「数据采样」页面挂载 `SampleTracePanel.vue`（导入、分层数量、审核人核对），
+在「调试追踪」页面挂载 `DebugTracePanel.vue`（会话、异常报告、中间结果差异、下载、
+再上传校验与台账），相关接口封装在 `frontend/src/api/sample-trace.ts`。
+
 领域：数据工程
 子方向：数据分析与数据应用

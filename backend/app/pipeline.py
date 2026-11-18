@@ -577,6 +577,38 @@ def sample_and_debug_trace(
     }
 
 
+def import_sample_trace_chain(
+    file_payload: dict[str, Any],
+    target_operator: str,
+) -> dict[str, Any]:
+    """序号16：跟着数据采样调用链定位导入，再沿调试追踪数据流核对导出。
+
+    导入文件 → 生成分层样本批次（绑定策略版本）→ 启动引用完整样本的调试会话
+    → 生成唯一当前调试异常报告 → 导出并回校，返回可追溯的全链路结果。
+    """
+    # 延迟导入避免与 store 初始化形成循环依赖
+    from app.services.sample_trace import sample_trace_service
+
+    imported = sample_trace_service.import_file(file_payload)
+    if not imported.get("ok"):
+        return {"ok": False, "stage": "import", "detail": imported}
+
+    batch_id = imported["batch_id"]
+    session = sample_trace_service.start_debug_session(batch_id, target_operator)
+    if not session.get("ok"):
+        return {"ok": False, "stage": "debug", "detail": session}
+
+    package = sample_trace_service.export_batch(batch_id)
+    verification = sample_trace_service.verify_export_file(package)
+    return {
+        "ok": True,
+        "import": imported,
+        "debug_session": session,
+        "export_checksum": package["file_checksum"],
+        "verification": verification,
+    }
+
+
 # ---- 链路7: metric_lineage 全链路追踪 ----
 
 def trace_metric_lineage(

@@ -89,6 +89,44 @@ class Store:
         self._channels: dict[str, DataChannelEvent] = {}
         # 失败恢复记录：recovery_id → FailureRecovery
         self._failures: dict[str, FailureRecovery] = {}
+        # 序号16：分层样本批次 / 调试会话 / 调试异常报告 / 导入导出台账
+        self._sample_batches: dict[str, dict[str, Any]] = {}
+        self._trace_sessions: dict[str, dict[str, Any]] = {}
+        self._debug_reports: dict[str, dict[str, Any]] = {}
+        self._trace_ledger: list[dict[str, Any]] = []
+
+    # ---- 序号16：事务支撑（失败回滚，退回原文件语义） ----
+
+    _TRACE_REGISTRIES = (
+        "_sample_batches",
+        "_trace_sessions",
+        "_debug_reports",
+        "_trace_ledger",
+    )
+
+    def trace_snapshot(self) -> dict[str, Any]:
+        """对序号16相关注册表做深拷贝快照，用于事务失败回滚。"""
+        return {
+            name: copy.deepcopy(getattr(self, name))
+            for name in self._TRACE_REGISTRIES
+        }
+
+    def trace_rollback(self, snapshot: dict[str, Any]) -> None:
+        """回滚序号16注册表到事务前状态，保证半成品数据不落库。"""
+        for name, value in snapshot.items():
+            setattr(self, name, copy.deepcopy(value))
+
+    def sample_batches(self) -> dict[str, dict[str, Any]]:
+        return self._sample_batches
+
+    def trace_sessions(self) -> dict[str, dict[str, Any]]:
+        return self._trace_sessions
+
+    def debug_reports(self) -> dict[str, dict[str, Any]]:
+        return self._debug_reports
+
+    def trace_ledger(self) -> list[dict[str, Any]]:
+        return self._trace_ledger
 
     # ---- 跨模块数据通道 ----
 

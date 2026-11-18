@@ -90,6 +90,9 @@
       <span>共 {{ total }} 条{{ meta.name }}记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+
+    <SampleTracePanel v-if="meta.key === 'data_sampler'" />
+    <DebugTracePanel v-else-if="meta.key === 'debug_trace'" />
   </section>
 </template>
 
@@ -103,6 +106,8 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/backend-service'
+import SampleTracePanel from '@/components/SampleTracePanel.vue'
+import DebugTracePanel from '@/components/DebugTracePanel.vue'
 import type { EntryRow } from '@/data/types'
 
 const props = defineProps<{ moduleKey: string }>()
